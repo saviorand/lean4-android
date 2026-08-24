@@ -5,7 +5,7 @@ Lean works inside an Android app process.
 
 ## Result
 
-On a HiBreak (Android 14, arm64-v8a):
+On an Android 14 arm64-v8a device:
 
 ```
 I LeanProbe: Lean runtime OK

@@ -30,7 +30,7 @@ I LeanProbe: array len=5 sum=70
 I LeanProbe: string="lean on android" len=15
 ```
 
-Verified on a HiBreak (Android 14, arm64-v8a) against Lean v4.33.0 with NDK r29.
+Verified on an Android 14 arm64-v8a device, against Lean v4.33.0 with NDK r29.
 
 - [x] All 26 runtime sources compile against Bionic, unpatched
 - [x] Full stage1: 4,982 modules, an ARM aarch64 `libleanshared.so` with 223,267 exported symbols
