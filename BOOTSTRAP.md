@@ -1,19 +1,25 @@
 # Bootstrapping the compiler and stdlib
 
-Notes from a partial cross-build of stage1. Not finished: this records what works,
-the three cross-compilation gaps found so far, and where it currently stops.
+The full stage1 cross-build works: 4,982 modules, 0 failures. This records the
+five gaps that had to be closed, all of them the same shape, plus what remains.
 
-## Result so far
-
-Lean's standard library **does** cross-compile to Android. 2,324 `.olean` files
-build, and generated Lean code compiles to real Android objects:
+## Result
 
 ```
-$ file stage1/lib/temp/Init/BinderNameHint.c.o.export
-ELF 64-bit LSB relocatable, ARM aarch64
+$ file stage1/lib/lean/libleanshared.so
+ELF 64-bit LSB shared object, ARM aarch64, dynamically linked
+
+$ llvm-readelf -d libleanshared.so | grep NEEDED
+  libc++_shared.so  libuv.so  libm.so  libdl.so  libc.so
+
+$ file stage1/bin/lean
+ELF 64-bit LSB pie executable, ARM aarch64, interpreter /system/bin/linker64
 ```
 
-The build does not yet complete; see [Where it stops](#where-it-stops).
+Bionic's unversioned `libc.so`/`libm.so`/`libdl.so`, not glibc's `libc.so.6`.
+223,267 exported symbols. `libInit.a` 28 MB, `libStd.a` 33 MB, `libLean.a` 328 MB.
+
+Reproduced by `scripts/build-stage1.sh`.
 
 ## Approach
 
@@ -42,9 +48,9 @@ OpenSSL **is** required here, unlike the runtime-only build:
 
 with the NDK `bin` on `PATH`. Produces `elf64-littleaarch64`.
 
-## The three gaps
+## The five gaps
 
-Each is the same shape: a host tool or flag leaking into the cross-build.
+Each is the same shape: a host tool, flag or assumption leaking into the cross-build.
 
 ### 1. `LEAN_CC` drops the toolchain's target flags
 
@@ -87,23 +93,53 @@ Adding `-I <libuv>/include` to the wrapper took failures from 1,921 to 403.
 
 ### 3. Host `libtool` archives Android objects
 
-The remaining failure. Objects are produced correctly as ARM aarch64, then the
-**host** `libtool` is used to archive them:
+`Lake/Build/Library.lean` selects the archiver like this:
+
+```lean
+if bootstrap then
+  if System.Platform.isOSX then
+    proc {cmd := "libtool", args := #["-static", "-o", ...
+```
+
+`System.Platform.isOSX` is the platform **Lake itself** was built for, not the
+target. A macOS host Lake therefore hands BSD `libtool` a set of ELF objects:
 
 ```
 libtool: warning: not a mach-o '.../Init/Internal/Order/Basic.c.o.export'
 ```
 
-macOS archiving tools on Android objects. Needs `llvm-ar` from the NDK instead;
-`CMAKE_AR`/`CMAKE_RANLIB` are not reaching this step.
+`LEAN_AR` is passed correctly but only consulted on the non-macOS branches. Worked
+around with a shim translating `-static -o OUT -filelist F` into `llvm-ar rcs OUT @F`.
 
-## Where it stops
+Like gap 1, this is a real upstream bug: it mistakes the build host for the target.
 
-At gap 3. 2,324 oleans and 47 verified Android objects exist, but nothing is
-archived or linked, so there is no runnable artifact yet.
+### 4. Host ships `.dylib`, build wants `.so`
 
-## Reproducing
+The build loads `<host-toolchain>/lib/lean/libLake_shared.so` as a plugin, but elan
+ships `.dylib` on macOS. Additive symlinks in the host toolchain; nothing is
+overwritten and they are trivially removable.
 
-Not scripted yet, deliberately: two of the three fixes are workarounds rather than
-something to commit to. `scripts/build-runtime.sh` covers the runtime, which is
-reproducible and complete.
+### 5. `-fPIC`
+
+```
+ld.lld: error: relocation R_AARCH64_ADD_ABS_LO12_NC cannot be used against
+symbol 'l_Lean_IR_ToIR_lowerLet___lam__0___boxed'; recompile with -fPIC
+```
+
+The stdlib objects end up in a shared library and Android rejects text relocations.
+Added to the `LEAN_CC` wrapper.
+
+## What still fails
+
+`lake` does not link (undefined `Lake_*` symbols). It is a host-side build tool, so
+Android does not need it, but a self-hosting toolchain would.
+
+## Not verified
+
+**Nothing has run on a device.** The artifacts have the right architecture, the
+right interpreter and the right Bionic dependencies, but that is a static claim.
+
+## Upstream
+
+Gaps 1 and 3 are narrow, genuine portability bugs, each worth its own PR
+independent of anyone adopting Android as a platform.
