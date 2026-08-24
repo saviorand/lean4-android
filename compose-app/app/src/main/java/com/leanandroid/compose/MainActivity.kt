@@ -59,6 +59,14 @@ private fun Screen() {
 
         HorizontalDivider()
 
+        // A screen whose structure was authored in Lean and checked by its type
+        // system; see ../../lean-compose. The JSON is generated at build time for
+        // now, since the Lean library still has to be cross-compiled into
+        // libleanshared.so to be callable over JNI.
+        LeanAuthoredScreen()
+
+        HorizontalDivider()
+
         Text("n = $n", style = MaterialTheme.typography.titleMedium)
         Slider(
             value = n.toFloat(),

@@ -1,0 +1,17 @@
+name = "lean-compose"
+version = "0.1.0"
+defaultTargets = ["Compose", "tests"]
+testDriver = "tests"
+
+[leanOptions]
+warningAsError = true
+
+[[lean_lib]]
+name = "Compose"
+
+[[lean_lib]]
+name = "ComposeTests"
+
+[[lean_exe]]
+name = "tests"
+root = "ComposeTests"
