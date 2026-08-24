@@ -45,15 +45,35 @@ rather than behind a server.
 
 ## Usage
 
+The runtime alone, which is quick and self-contained:
+
 ```
 export ANDROID_NDK_HOME=/path/to/android-ndk   # or pass --ndk
 ./scripts/build-runtime.sh
 ```
 
+The whole toolchain, which is what an app links against:
+
+```
+./scripts/build-stage1.sh
+```
+
+`build-stage1.sh` additionally needs **a host Lean of the same version** — 4.33.0 by
+default. Lean is written in Lean, and a cross-compiled compiler cannot run on the
+build machine, so a host one drives the build:
+
+```
+elan toolchain install leanprover/lean4:v4.33.0
+```
+
+It is found at `~/.elan/toolchains/leanprover--lean4---v4.33.0`, or pass
+`--host-toolchain`. Expect a long build (~5,000 modules) and about 10 GB of disk.
+
 Everything lands in `build/`: `libleanrt_android.a`, `libuv-build/libuv.a`, and
 the two cloned sources. Options: `--lean-version`, `--api`, `--ndk`, `--build-dir`.
 
-Requires the Android NDK, CMake, Ninja and git. Roughly 2 GB of disk.
+`build-runtime.sh` requires the Android NDK, CMake, Ninja and git, and about 2 GB
+of disk.
 
 ## What works
 
