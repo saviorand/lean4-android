@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Compose draws its own Material 3 surfaces, so the platform theme only has to
-         stay out of the way: no action bar, no title. -->
-    <style name="Theme.LeanCompose" parent="android:Theme.Material.Light.NoActionBar"/>
-</resources>

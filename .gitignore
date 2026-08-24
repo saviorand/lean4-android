@@ -1,7 +1,3 @@
 build/
 .DS_Store
-compose-app/app/src/main/jniLibs/
-compose-app/.gradle/
-compose-app/app/build/
-compose-app/build/
 lean-compose/.lake/

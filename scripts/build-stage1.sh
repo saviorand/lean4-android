@@ -168,4 +168,4 @@ echo "  modules built: $(grep -c '✔' "$BUILD/build.log" || echo '?')"
 echo "  $SO"
 file "$SO" | sed 's/^.*: /  /'
 echo
-echo "  Next: compose-app/README.md to build an app around it."
+echo "  Next: https://github.com/saviorand/lean-android-compose builds an app on this."
