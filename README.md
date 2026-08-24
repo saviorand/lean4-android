@@ -11,8 +11,11 @@ I LeanProbe: array len=5 sum=70
 I LeanProbe: string="lean on android" len=15
 ```
 
-Computed by Lean's runtime inside an Android app process. See
-[android-probe/](android-probe/).
+Computed by Lean's runtime inside an Android app process.
+
+There are two apps: [android-probe/](android-probe/), a minimal APK that proves the
+runtime works, and [compose-app/](compose-app/), a Jetpack Compose UI driving Lean
+over JNI, including factorials through Lean's arbitrary-precision `Nat`.
 
 Two scripts:
 
@@ -23,8 +26,6 @@ Two scripts:
   symbols, plus `libInit.a` (28 MB), `libStd.a` (33 MB) and `libLean.a` (328 MB).
 
 Both against Lean v4.33.0 with NDK r29 (clang 21).
-
-`android-probe/` is a minimal APK with a JNI bridge that proves it works on device.
 
 See [What is left](#what-is-left) for the real remaining problem, which is size.
 
