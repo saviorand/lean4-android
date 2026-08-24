@@ -1,9 +1,28 @@
-# lean4-android
+<a name="readme-top"></a>
 
-Cross-compiling the [Lean 4](https://github.com/leanprover/lean4) runtime for
-Android (`aarch64-linux-android`) with the NDK.
+<div align="center">
+  <h3 align="center">lean4-android</h3>
 
-**Status: Lean runs on Android.** Verified on a HiBreak (Android 14, arm64-v8a):
+  <p align="center">
+    🤖 Lean 4, cross-compiled for Android 📱
+    <br/>
+
+   ![Written in Lean][language-shield]
+   [![Apache 2.0 License][license-shield]][license-url]
+   [![Contributors Welcome][contributors-shield]][contributors-url]
+
+  </p>
+</div>
+
+## Overview
+
+Lean publishes no Android build, and as far as we can tell nobody had tried: at the
+time of writing `leanprover/lean4` has no issue mentioning Termux, Bionic,
+`aarch64-linux-android` or seccomp.
+
+This cross-compiles Lean 4 for `aarch64-linux-android` with the NDK. The runtime,
+the standard library and the compiler all build, and Lean runs inside an Android app
+process:
 
 ```
 I LeanProbe: Lean runtime OK
@@ -11,136 +30,88 @@ I LeanProbe: array len=5 sum=70
 I LeanProbe: string="lean on android" len=15
 ```
 
-Computed by Lean's runtime inside an Android app process.
+Verified on a HiBreak (Android 14, arm64-v8a) against Lean v4.33.0 with NDK r29.
 
-[android-probe/](android-probe/) is a minimal APK that proves the runtime works.
-For a real app on top of it, see
-[lean-android-compose](https://github.com/saviorand/lean-android-compose), and for
-authoring UI in Lean itself,
-[lean-compose](https://github.com/saviorand/lean-compose).
+- [x] All 26 runtime sources compile against Bionic, unpatched
+- [x] Full stage1: 4,982 modules, an ARM aarch64 `libleanshared.so` with 223,267 exported symbols
+- [x] Runs in an APK
+- [ ] Trimmed to a size an app could ship
 
-Two scripts:
+## Getting Started
 
-- `scripts/build-runtime.sh` builds Lean's 26 C++ runtime sources into
-  `libleanrt_android.a` (~1.3 MB). Fast, self-contained, clean-verified.
-- `scripts/build-stage1.sh` builds the whole thing: runtime, standard library and
-  compiler. 4,982 modules, producing `libleanshared.so` with 223,267 exported
-  symbols, plus `libInit.a` (28 MB), `libStd.a` (33 MB) and `libLean.a` (328 MB).
-  This is what an app links against.
-
-Both against Lean v4.33.0 with NDK r29 (clang 21).
-
-See [What is left](#what-is-left) for the real remaining problem, which is size.
-
-## Why
-
-Lean publishes no Android build; its release assets are darwin, darwin_aarch64,
-linux, linux_aarch64 and windows. As far as we can tell nobody has tried: at the
-time of writing `leanprover/lean4` has no issue mentioning Termux, Bionic,
-`aarch64-linux-android` or seccomp, and there is no Zulip topic or Termux package
-for it.
-
-The goal is Lean running inside an Android app, with verified logic on-device
-rather than behind a server.
-
-## Usage
+The only hard dependencies are the Android NDK, CMake, Ninja and git.
 
 The runtime alone, which is quick and self-contained:
 
-```
-export ANDROID_NDK_HOME=/path/to/android-ndk   # or pass --ndk
+```bash
+export ANDROID_NDK_HOME=/path/to/android-ndk
 ./scripts/build-runtime.sh
 ```
 
 The whole toolchain, which is what an app links against:
 
-```
+```bash
+elan toolchain install leanprover/lean4:v4.33.0
 ./scripts/build-stage1.sh
 ```
 
-`build-stage1.sh` additionally needs **a host Lean of the same version** — 4.33.0 by
-default. Lean is written in Lean, and a cross-compiled compiler cannot run on the
-build machine, so a host one drives the build:
+`build-stage1.sh` needs a **host** Lean of the same version: Lean is written in Lean,
+and a cross-compiled compiler cannot run on the build machine. Expect ~5,000 modules
+and about 10 GB of disk.
 
-```
-elan toolchain install leanprover/lean4:v4.33.0
-```
+> [!NOTE]
+> `build-stage1.sh` encodes a build that was carried out step by step and verified at
+> each stage, but the script itself has not yet been run start to finish. If it fails,
+> please open an issue: the fix is likely small.
 
-It is found at `~/.elan/toolchains/leanprover--lean4---v4.33.0`, or pass
-`--host-toolchain`. Expect a long build (~5,000 modules) and about 10 GB of disk.
+## What it takes
 
-Everything lands in `build/`: `libleanrt_android.a`, `libuv-build/libuv.a`, and
-the two cloned sources. Options: `--lean-version`, `--api`, `--ndk`, `--build-dir`.
+Five host-versus-target leaks had to be closed. Two look like genuine upstream
+portability bugs, both mistaking the platform the build runs on for the platform it
+targets:
 
-`build-runtime.sh` requires the Android NDK, CMake, Ninja and git, and about 2 GB
-of disk.
+- **`LEAN_CC` never receives the toolchain's `--target`/`--sysroot`.** Lake invokes it
+  directly rather than through `leanc.sh`, and Lean's CMake never folds in
+  `CMAKE_C_FLAGS`, so every object fails on `sys/cdefs.h`.
+- **Lake picks `libtool` from `System.Platform.isOSX`**, which reports the platform
+  *Lake* was built for. A macOS host then hands BSD `libtool` a set of ELF objects.
 
-## What works
+The rest: libuv include paths, host `.dylib` versus `.so` naming, and a missing
+`-fPIC`. [BOOTSTRAP.md](BOOTSTRAP.md) has the detail.
 
-Every one of Lean's 26 runtime sources compiles unmodified: the object model and
-garbage collector, allocator, threads, bignums, the libuv-backed IO layer, UTF-8,
-and object compaction. 596 exported text symbols in the archive.
+Running inside an app additionally needs
+`android:allowNativeHeapPointerTagging="false"`. Android 11+ stores a tag in the top
+byte of heap pointers and Lean's `lean_box` shifts values into it, so Bionic's
+`free()` aborts. That flag is APK-only, which is why the same libraries cannot run
+from `adb shell`.
 
-**No patches to Lean, and none to libuv.** Two things that looked like blockers
-turned out not to be:
+## Roadmap
 
-- **libuv** carries a first-class `if(CMAKE_SYSTEM_NAME STREQUAL "Android")` branch
-  in its own CMakeLists, present in v1.48.0, the revision Lean pins. It builds for
-  `arm64-v8a` with the stock NDK toolchain file, 74/74 targets, no patches.
-- **OpenSSL** is not needed *for the runtime*. `runtime/openssl.cpp` wraps its
-  includes in `#ifndef LEAN_EMSCRIPTEN`, so that define compiles the same stub the
-  WebAssembly target uses. The full build does require it
-  (`find_package(OpenSSL REQUIRED)`); it cross-compiles with
-  `./Configure android-arm64 -D__ANDROID_API__=34 no-shared no-tests`. See
-  [BOOTSTRAP.md](BOOTSTRAP.md).
+- [ ] **Size.** `libleanshared.so` is 161 MB stripped, 110 MB of it `.text` for the
+      compiler and elaborator an app never calls. This is what stands between this
+      and shipping anything.
+- [ ] Upstream the two portability fixes as their own PRs
+- [ ] A durable answer to pointer tagging; Google documents the manifest flag as a
+      temporary escape hatch
+- [ ] `lake` itself does not link for Android, which a self-hosting toolchain would need
 
-Lean's backtrace support also disables itself: `LEAN_SUPPORTS_BACKTRACE` keys off
-`__GLIBC__`/`__APPLE__`, and Bionic defines neither, so `<execinfo.h>` is never
-reached. Confirmed absent from the output.
+## Related
 
-## Notes for anyone repeating this
+- [lean-android-compose](https://github.com/saviorand/lean-android-compose) — a Compose app on top of this
+- [lean-compose](https://github.com/saviorand/lean-compose) — authoring Compose UI in Lean
 
-Four things cost time, none of them Android's fault:
+## Contributing
 
-1. **Lean needs C++20**, not C++17 (`src/CMakeLists.txt`). Compiling with C++17
-   produces plausible-looking errors about `std::bit_cast`, `memory_order::relaxed`
-   and `atomic::wait` that have nothing to do with the target.
-2. **`version.h.in` already quotes its string fields.** The template reads
-   `#define LEAN_PLATFORM_TARGET "@LEAN_PLATFORM_TARGET@"`, so substitutions must be
-   bare; quoting them yields `""foo""`, which clang rejects as a user-defined literal.
-3. **`LEAN_MIMALLOC` is tested with `#ifdef`.** Defining it to `0` still pulls in
-   `<lean/mimalloc.h>`. It has to be absent.
-4. **`-DLEAN_EMSCRIPTEN` must be scoped to `openssl.cpp`.** Applied globally, other
-   sources take their own Emscripten branches and look for `<emscripten.h>`.
+Contributions are welcome. This is early work in a place nobody has been, so issues
+reporting what broke on your machine are as useful as patches.
 
-`lean/lean.h` lives in `src/include`, and `config.h`, `version.h` and `githash.h`
-are all generated by CMake, so a direct compile has to produce them.
+## License
 
-## What is left
+Distributed under the Apache 2.0 License. See [LICENSE](LICENSE) for more information.
 
-- **Size.** `libleanshared.so` is 161 MB stripped, and its `.text` alone is 110 MB:
-  the entire Lean compiler and elaborator, which an app does not need. This is the
-  main thing standing between this and shipping anything.
-- **Pointer tagging.** Works today only via
-  `android:allowNativeHeapPointerTagging="false"`, which Google documents as a
-  temporary escape hatch. The durable fix is upstream.
-- **`lake`.** The host-side build tool does not link for Android (undefined Lake
-  symbols). Android does not need it, but a self-hosting toolchain would.
-- **APK build.** Not scripted; see `android-probe/README.md`.
-- **JNI.** An app needs a boundary between Kotlin and Lean.
-- **16 KB pages.** Android 15+ requires it; alignment flags are untested here.
-
-## Relationship to upstream
-
-This is not proposed for upstream. Lean's maintainers
-[declined a musl target](https://github.com/leanprover/lean4/issues/2931) as
-`not_planned`, citing the cost of another supported platform and libuv's tiering,
-and suggested a community build repo instead. Android is libuv Tier 3, one below
-musl, so the same reasoning applies more strongly.
-
-Small portability fixes found along the way may be worth offering upstream
-individually. Adopting Android as a platform is not the ask.
-
-## Licence
-
-Build scripts here are Apache 2.0, matching Lean. Lean and libuv keep their own.
+<!-- MARKDOWN LINKS & IMAGES -->
+[language-shield]: https://img.shields.io/badge/language-lean4-blueviolet
+[license-shield]: https://img.shields.io/github/license/saviorand/lean4-android?logo=github
+[license-url]: https://github.com/saviorand/lean4-android/blob/main/LICENSE
+[contributors-shield]: https://img.shields.io/badge/contributors-welcome!-blue
+[contributors-url]: https://github.com/saviorand/lean4-android#contributing
