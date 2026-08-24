@@ -49,3 +49,10 @@ progress indicator and does the work on `Dispatchers.Default`.
   themes in code, so the platform theme just needs to stay out of the way.
 - `lean_nat_to_string` does not exist. `Nat` to `String` is `l_Nat_reprFast`,
   declared `extern`; it consumes its argument.
+
+## Requirements
+
+- Android NDK r29 (or set `ANDROID_NDK_HOME`)
+- Android SDK with platform 34 and build-tools 34
+- JDK 17+
+- `./gradlew` handles Gradle itself
