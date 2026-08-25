@@ -26,7 +26,8 @@ Tested on an Android 14 arm64-v8a device, against Lean v4.33.0 with NDK r29.
 - [x] Full stage1 build: 4,982 modules, producing an ARM aarch64 `libleanshared.so`
       with 223,267 exported symbols
 - [x] Runs in an APK, with a minimal probe app to demonstrate it
-- [ ] Small enough for an app to ship
+- [x] Small enough for an app to ship: 10 MB stripped, linked statically with
+      `--gc-sections`
 
 ## Getting Started
 
@@ -52,9 +53,11 @@ Lean is written in Lean, so a cross-compiled compiler cannot run on the build
 machine. `build-stage1.sh` therefore needs a host Lean of the same version to drive
 the build. Expect roughly 5,000 modules and 10 GB of disk.
 
-> [!NOTE]
-> The stage1 build was carried out step by step and verified at each stage, but the
-> script has not yet been run start to finish. If it fails, please open an issue.
+The build produces static archives (`libInit.a`, `libStd.a`, `libleanrt_initial-exec.a`,
+`libleancpp.a`) alongside `libleanshared.so`. Linking an application against the
+archives with `--gc-sections` rather than shipping the shared library takes the
+runtime from 161 MB to 10 MB stripped; see
+[lean-android-compose](https://github.com/saviorand/lean-android-compose).
 
 ## Portability findings
 
@@ -80,8 +83,6 @@ cannot be run from `adb shell`.
 
 ## Roadmap
 
-- [ ] Reduce size. `libleanshared.so` is 161 MB stripped, 110 MB of which is `.text`
-      for the compiler and elaborator that an application never calls
 - [ ] Submit the two portability fixes upstream as separate PRs
 - [ ] Replace the pointer tagging flag, which Google documents as a temporary escape
       hatch

@@ -75,9 +75,16 @@ say "Writing cross-compilation shims"
 # -fPIC cannot ride alongside it. Lake invokes $LEAN_CC directly rather than through
 # leanc.sh, and Lean's CMake never folds CMAKE_C_FLAGS into it, so without this the
 # NDK's --target/--sysroot never arrive and every object fails on sys/cdefs.h.
+# -ffunction-sections/-fdata-sections put every function and datum in its own
+# section, which is what lets a later --gc-sections drop the ones nothing reaches.
+# -fvisibility=hidden keeps them out of the dynamic symbol table: .dynsym and
+# .dynstr are ~29 MB of the shipped library, almost all of it names for exports an
+# application never calls.
 cat > "$BUILD/ndk-cc.sh" <<EOF
 #!/usr/bin/env bash
-exec $BIN/clang --target=aarch64-linux-android$API --sysroot=$SYSROOT -fPIC -I $BUILD/libuv/include "\$@"
+exec $BIN/clang --target=aarch64-linux-android$API --sysroot=$SYSROOT -fPIC \
+  -ffunction-sections -fdata-sections -fvisibility=hidden \
+  -I $BUILD/libuv/include "\$@"
 EOF
 chmod +x "$BUILD/ndk-cc.sh"
 
@@ -150,7 +157,8 @@ cmake -S "$BUILD/lean4" -B "$BUILD/stage" \
   -DSTAGE1_OPENSSL_CRYPTO_LIBRARY="$BUILD/openssl-install/lib/libcrypto.a" \
   -DSTAGE1_OPENSSL_SSL_LIBRARY="$BUILD/openssl-install/lib/libssl.a" \
   -DSTAGE1_OPENSSL_INCLUDE_DIR="$BUILD/openssl-install/include" \
-  -DSTAGE1_LEANC_EXTRA_CC_FLAGS="--target=aarch64-linux-android$API --sysroot=$SYSROOT -fPIC -I$BUILD/libuv/include" \
+  -DSTAGE1_LEANC_EXTRA_CC_FLAGS="--target=aarch64-linux-android$API --sysroot=$SYSROOT -fPIC -ffunction-sections -fdata-sections -fvisibility=hidden -I$BUILD/libuv/include" \
+  -DSTAGE1_LEAN_EXTRA_LINKER_FLAGS="-Wl,--gc-sections" \
   > "$BUILD/configure.log" 2>&1 || die "configure failed, see $BUILD/configure.log"
 
 say "Building stage1 (long; 5k modules)"
